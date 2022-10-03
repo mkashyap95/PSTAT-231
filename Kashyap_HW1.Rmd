@@ -9,26 +9,56 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-#Homework 1
+
+## Homework 1
+
 
 PSTAT 231
 
-##Question 1
+
+### Question 1
+
 
 The primary difference between supervised and unsupervised learning is the presence of an outcome variable to guide the learning process. 
 In supervised learning, the response variable (Y) acts as the "supervisor" allowing us to assess how well the machine has learned to predict Y. 
 The presence (or absence) of an outcome variable also leads to differing goals. In unsupervised learning, the absence of an outcome variable implies that our task is to attempt to understand the organization (or clustering) of the data. Whereas with supervised learning, the goal is to understand how the predictor variable(s) influence the outcome variable.
 
 
-##Question 2
+### Question 2
+
 
 Regression and classification models differ in the type of output variables they deal with. Regression models are used to predict quantitative outputs while classification models are employed to predict qualitative output. 
 
-##Question 3
+
+### Question 3
+
 
 When choosing a model, a trade off must be made between model flexibility and interpretability. A model that is very flexible and fits the training data perfectly and minimizes error entirely is not necessarily the best model. A model high in flexibility may be susceptible to overfitting by capturing the noise in the data within the model as well. To evaluate the optimal point within this trade off, we use the training and test MSE in regression models and the training and test error rate for classification models.
 A small training error but a large test error would signal overfitting, therefore attention must be paid to both error rates when evaluating a specific model.
 
-##Question 4
 
-1. Descriptive models
+### Question 4
+
+
+1. Descriptive models - a model that helps with visualization of trends in the data. For example, a correlation line in a scatter plot to understand the direction and magnitude of the relationship between 2 variables.
+
+2. Inferential models - these models can be used to describe the relationship between the predictor and outcome variables, and assess which of these specific relationships is significant. As a consequence, these models are often used to test theories and (in some cases) causal claims.
+
+3. Predictive models - the goal of these models is to understand which predictors are most useful in predicting the outcome variable(s) while minimizing the reducible error. Therefore, these are generally focused less on testing theories and more focused on understanding which features best describe the outcome variable(s).
+
+
+### Question 5
+
+
+Mechanistic and empirically-driven are different methods used to estimate f, or the systematic information that X provides about Y. 
+Mechanistic methods usually assume a parametric form for f (like the linear model). This results in a less flexible model that is unlikely to match the true form of f, but is more interpretable. Adding parameters to these models allow for the increase of flexibility, but too many risks overfitting the data.
+Empirically-driven, or non-parametric, models in contrast don't make any assumptions regarding the form of f, and are therefore a lot more flexible and have a higher likelihood of estimating true f. However, these types of models require a larger number of observations and are at a higher risk of overfitting.
+
+
+### Question 6
+
+
+1. Given a voter’s profile/data, how likely is it that they will vote in favor of the candidate?
+
+2. How would a voter’s likelihood of support for the candidate change if they had personal contact with the candidate?
+This is an inference problem because it is interested in the relationship between a predictor (personal contact with the candidate) and an outcome (likelihood of voting fo a candidate).
