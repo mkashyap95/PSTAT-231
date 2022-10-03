@@ -2,13 +2,11 @@
 title: "Kashyap_HW1"
 author: "Madhuri"
 date: "2022-10-01"
-output: html_document
+output: 
+  html_document:
+    toc: true
+    toc_float: true
 ---
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
 
 ## Homework 1
 
@@ -59,6 +57,105 @@ Empirically-driven, or non-parametric, models in contrast don't make any assumpt
 
 
 1. Given a voter’s profile/data, how likely is it that they will vote in favor of the candidate?
+This is a prediction problem because it is interested in answering a question regarding how certain predictors (voter's profile) influences the outcome variable (voting behavior) but the outcome variable here is not readily available.
 
 2. How would a voter’s likelihood of support for the candidate change if they had personal contact with the candidate?
 This is an inference problem because it is interested in the relationship between a predictor (personal contact with the candidate) and an outcome (likelihood of voting fo a candidate).
+
+
+## Exploratory Data Analysis
+
+### Question 1
+
+
+```{r setup, include = FALSE}
+library(tidyverse)
+library(forcats)
+library(corrplot)
+library(ggthemes)
+data(mpg)
+```
+
+
+```{r EDA-Q1}
+hist(mpg$hwy)
+```
+
+Most individuals get between 15-30 miles/gallon while driving on the highway with very few cars being more efficient than 30 miles/gallon.
+
+
+### Question 2
+
+```{r Q2}
+ggplot(data = mpg, aes(x = hwy, y = cty)) +
+  geom_point() +
+  geom_smooth()
+```
+
+
+We see that highway and city miles/gallon are positively correlated suggesting that most vehicles perform proportionately well on highways and cities. No car models appear to have differing mileage on highways and cities.
+
+
+### Question 3
+
+```{r Q3}
+ggplot(mpg, aes(fct_rev(fct_infreq(manufacturer)))) +
+  geom_bar() +
+  coord_flip()
+```
+
+Dodge manufactured the most cars while Lincoln manufactured the least number of *popular* cars. 
+
+
+### Question 4
+
+```{r Q4}
+mpg$cyl_factors <- as.factor(mpg$cyl)
+ggplot(mpg, aes(y=hwy,x=cyl_factors)) +
+  geom_boxplot() 
+```
+
+We see that, on average, cars with a lower number of cylinders yield greater miles/gallon and are more efficient. However, there are no cars in this data set that have fewer than 4 cylinders so it's unclear whether this trend is linear (greater mileage for fewer than 4 cyl) or non-linear.
+
+
+### Question 5
+
+```{r Q5}
+mpg_numeric <- select(mpg, "displ","year", "cyl","cty","hwy")
+a <- cor(mpg_numeric)
+corrplot(a, method = 'number', type = 'lower')
+```
+
+Engine displacement is negatively correlated with miles/gallon (city and highway), but positively correlated with number of cylinders. Number of cylinders is negatively correlated with miles/gallon.
+The positive correlation between engine displacement and number of cylinders is intuitive as this is a measure of the cylinder volume swept by the pistons. However, it is unclear as to why there is a negative relationship between mileage and number of cylinders. We could hypothesize that this may the consequence of sacrificed efficiency - greater number of cylinders requires subobtimal energy distribution for the functioning of the car, but this would need to be tested further.
+
+
+### Question 6
+
+```{r Q6}
+ggplot(mpg, aes(x=hwy,y=class)) +
+  geom_boxplot() +
+  geom_point(position = position_jitter(w=0,h=0.4), alpha = 0.2) +
+  theme_gdocs() +
+  xlab("Highway MPG") +
+  ylab("Vehicle Classes")
+```
+
+
+### Question 7
+
+```{r}
+ggplot(mpg, aes(x=class, y=hwy)) +
+  geom_boxplot(aes(fill=drv))
+```
+
+
+### Question 8
+
+```{r}
+ggplot(data=mpg, aes(x=displ, y=hwy, colour = drv)) + 
+  geom_point(size = 2, aes(color = drv)) + 
+  stat_smooth(method = "loess", formula = y ~ x, se = FALSE, colour='blue',
+              aes(linetype = drv))
+```
+
