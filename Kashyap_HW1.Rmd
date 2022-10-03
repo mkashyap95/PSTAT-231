@@ -9,22 +9,26 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+#Homework 1
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+PSTAT 231
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+##Question 1
 
-```{r cars}
-summary(cars)
-```
+The primary difference between supervised and unsupervised learning is the presence of an outcome variable to guide the learning process. 
+In supervised learning, the response variable (Y) acts as the "supervisor" allowing us to assess how well the machine has learned to predict Y. 
+The presence (or absence) of an outcome variable also leads to differing goals. In unsupervised learning, the absence of an outcome variable implies that our task is to attempt to understand the organization (or clustering) of the data. Whereas with supervised learning, the goal is to understand how the predictor variable(s) influence the outcome variable.
 
-## Including Plots
 
-You can also embed plots, for example:
+##Question 2
 
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
+Regression and classification models differ in the type of output variables they deal with. Regression models are used to predict quantitative outputs while classification models are employed to predict qualitative output. 
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+##Question 3
+
+When choosing a model, a trade off must be made between model flexibility and interpretability. A model that is very flexible and fits the training data perfectly and minimizes error entirely is not necessarily the best model. A model high in flexibility may be susceptible to overfitting by capturing the noise in the data within the model as well. To evaluate the optimal point within this trade off, we use the training and test MSE in regression models and the training and test error rate for classification models.
+A small training error but a large test error would signal overfitting, therefore attention must be paid to both error rates when evaluating a specific model.
+
+##Question 4
+
+1. Descriptive models
