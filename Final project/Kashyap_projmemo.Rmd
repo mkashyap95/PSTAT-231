@@ -1,11 +1,32 @@
 ---
-title: "Kashyap_projmemo"
+title: "Project Memo"
 author: "Madhuri"
 date: "10/03/2022"
-output: html_document
+output: 
+  html_document:
+    toc: true
+    toc_float: true
 ---
 
-```{r}
+## Overview of the Dataset
 
-```
+The dataset includes data collected from the Board Game Geek (BGG) website in February 2021. In contains the names, metrics (max., min. player counts, play time, minimum age to play, BGG rank, complexity rating), mechanics, domain of projected use, the number of ratings, and the average rating for a set of ~20,000 board games. This is a user created data set that can be accessed through Kaggle (https://www.kaggle.com/datasets/andrewmvd/board-games). The variables in this dataset are a mix of numeric and categorical data and there does not appear to be any data missing.
 
+
+## Overview of Research Questions
+
+1. What are the most relevant predictors of game ratings? 
+I'm interested in understanding the relationship between the rating of games and the other metrics and mechanics pertaining to the game, and the best set of variables to predict the rating of games. In this instance, the response variable would be a continuous numeric value (1-10) of the average rating of games. Therefore, a regression approach would be best for this problem and I suspect that the most important predictors will be complexity rating and play time (which may likely interact to influence the rating as well). The goal of this model would be focused on inference - understanding the relationship between predictors and outcome.
+
+2. What are the best games to play in the future, given a set of previous games?
+I'm also interested in classifying games in an attempt to build a recommendation engine that can predict what games users would like depending on a list of previous games they've played and enjoyed in the past. The response variable here will be the list of recommended games which is qualitative in nature and will be best dealt with using a a classification approach. Predictors that would be particularly useful here are the number of players, the level of complexity, mechanics, and domain of projected use. The goal of this model is focused on predictions - using previous game preferences to predict future gaming interests.
+
+
+## Projected Timeline
+
+The data set is a bit messy so I predict that there will be some time spent on wrangling and cleaning but it can be ready for EDA in another week. EDA will take about 1 week, 3 weeks for the inference question (research question #1), and 4 weeks for the recommendation model (research question #2).
+
+
+## Anticipated problems
+
+Both questions require me to deal with text data (names of games) which may be somewhat challenging, particularly with the recommendation engine. Although somewhat different, I'm hoping that solving the problem for the 1st question will pave the way for the second question. I have no specific questions at the moment but will likely be approaching you for advice on best ways to deal with textual analysis
