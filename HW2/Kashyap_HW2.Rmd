@@ -2,11 +2,71 @@
 title: "Kashyap_HW2"
 author: "Madhuri"
 date: "`r Sys.Date()`"
-output: html_document
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_floating: true
 ---
+
+## Hoemwork 2
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+#packages
+library(tidymodels)
+library(tidyverse)
 
+#data
+df <- read.csv("abalone.data")
+
+#renaming column names
+colnames(df) <- c('sex','length','diameter','ht','whole_wt','shucked_wt','viscera_wt','shell
+                  _wt','rings')
+```
+
+
+### Question 1
+
+```{r}
+#creating age = no. of rings + 1.5
+df$age <- df$rings + 1.5
+head(df)
+mean(df$age)
+
+#distribution of age
+df %>% 
+  ggplot(aes(x=age)) +
+  geom_histogram() +
+  theme_classic()
+```
+
+The age abalone shells is slightly positively skewed, implying that most of the abalones are younger in age (at the lower end), with a long tail to the right. Most abalones are 11 years old.
+
+
+### Question 2
+
+```{r}
+set.seed(1995)
+
+#splitting data
+df_split <- initial_split(df, prop = 0.80, strata = age)
+abalone_train <- training(df_split)
+abalone_test <- testing(df_split)
+```
+
+
+### Question 3
+
+```{r}
+#creating recipe using training data
+simple_abalone_recipe <- recipe(age ~ ., data = abalone_train)
+simple_abalone_recipe
+
+
+#dummy coding categorical predictors
+abalone_recipe <- recipe(age ~ ., data = abalone_train) %>% 
+  step_dummy(all_nominal_predictors())
+abalone_recipe
 ```
 
