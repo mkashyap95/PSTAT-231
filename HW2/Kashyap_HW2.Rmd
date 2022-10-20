@@ -67,9 +67,8 @@ simple_abalone_recipe
 
 
 #dummy coding categorical predictors
-abalone_recipe <- recipe(age ~ sex + length + diameter + ht + whole_wt + shucked_wt +
-                           viscera_wt + shell_wt, data = abalone_train) %>% 
-  step_dummy_multi_choice(all_nominal_predictors()) %>% 
+abalone_recipe <- simple_abalone_recipe %>% 
+  step_dummy(all_nominal_predictors()) %>% 
   step_interact(terms = ~ sex_M:shucked_wt) %>% 
   step_interact(terms = ~ length:diameter) %>% 
   step_interact(terms = ~ shucked_wt:shell_wt) %>% 
@@ -96,18 +95,18 @@ lm_wflow <- workflow() %>%
   add_model(lm_model) %>% 
   add_recipe(abalone_recipe)
 
-#fitting to model and recipe
-lm_fit <- fit(lm_wflow, abalone_train)
-lm_fit %>% 
-  extract_fit_parsnip() %>% 
-  tidy()
+summary(lm_wflow)
 ```
 
 
 ### Question 6
 
 ```{r}
-
+#fitting to model and recipe
+lm_fit <- fit(lm_wflow, abalone_train)
+lm_fit %>% 
+  extract_fit_parsnip() %>% 
+  tidy()
 ```
 
 
