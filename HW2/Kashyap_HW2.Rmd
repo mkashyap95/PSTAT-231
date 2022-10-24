@@ -16,6 +16,7 @@ knitr::opts_chunk$set(echo = TRUE)
 #packages
 library(tidymodels)
 library(tidyverse)
+library(readxl)
 
 #data
 df <- read.csv("abalone.data")
@@ -107,7 +108,14 @@ lm_fit <- fit(lm_wflow, abalone_train)
 lm_fit %>% 
   extract_fit_parsnip() %>% 
   tidy()
+
+question6 <- read_excel("question6.xlsx")
+#"F",0.50,0.10,0.30,4,1,2,1)
+q6_prediction <- predict(lm_fit,new_data=question6)
+q6_prediction
 ```
+
+The predicted age for a hypothetical female abalone with longest_shell = 0.50, diameter = 0.10, height = 0.30, whole_weight = 4, shucked_weight = 1, viscera_weight = 2, shell_weight = 1 is 23.35 years old.
 
 
 ### Question 7
@@ -118,10 +126,14 @@ abalone_train_res <- predict(lm_fit, new_data = abalone_train %>% select(-age))
 abalone_train_res %>% 
   head()
 
-#attaching column of actual observed age
+#reattaching column of actual observed age
 abalone_train_res <- bind_cols(abalone_train_res, abalone_train %>% select(age))
 abalone_train_res %>% 
   head()
+
+#metrics
+abalone_metrics <- metric_set(rmse, rsq, mae)
+abalone_metrics(abalone_train_res, truth = age, estimate = .pred)
 
 #plotting predicted vs. observed
 abalone_train_res %>% 
@@ -132,3 +144,17 @@ abalone_train_res %>%
   coord_obs_pred()
 ```
 
+
+Our R^2 = 0.56 implying that our model explains ~56% of the variance in age using our predictor variables. Looking at the graphical representation of our predicted-fitted values of age, however, we see that the model is not doing a great job at predicting age. It begins to perform worse onsce the abalone age is over 10 years, as evidenced by the larger spread of data.
+
+
+### Question 8
+
+Var($\epsilon$) is the irreducible error.
+
+### Question 9
+
+$$Total_{error} = var + bias^2 + irreducible error$$
+Let's say $$var = \theta + bias^2 = \theta$$
+
+The $total_{error}$ still has irreducible error.
