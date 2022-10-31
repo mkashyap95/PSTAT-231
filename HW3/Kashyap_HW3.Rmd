@@ -6,6 +6,8 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
+library(usethis)
+gitcreds::gitcreds_set()
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
