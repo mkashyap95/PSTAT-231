@@ -1,0 +1,73 @@
+---
+title: "Kashyap_HW5"
+author: "Madhuri"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## Homework 5
+
+```{r setup, include=FALSE}
+library(janitor)
+library(tidymodels)
+library(tidyverse)
+library(ggplot2)
+
+df <- read.csv("Pokemon.csv")
+```
+
+
+### Question 1
+
+```{r}
+df_clean <- as_tibble(df) %>% 
+  clean_names()
+```
+
+The clean_names() function altered the column names, making them more readable This has obvious benefits in increasing usability by making all the characters lower case and removing any special symbols.
+
+
+### Question 2
+
+```{r}
+#barplot
+ggplot(df_clean, aes(x = type_1)) +
+  geom_bar(stat = "count", fill = "steelblue") +
+  theme_classic() +
+  coord_flip() +
+  xlab("Primary Type") +
+  ylab("Count") 
+
+#number of classes =18
+summary(factor(df_clean$type_1))
+
+#filtering data
+df_filtered <- filter(df_clean, type_1 == "Bug" | type_1 == "Fire" | type_1 == "Grass" |
+                        type_1 == "Normal" | type_1 == "Water" | type_1 == "Psychic")
+#checking new dataframe
+summary(factor(df_filtered$type_1))
+
+#converting to factors
+df_filtered$type_1 <- as.factor(df_filtered$type_1)
+df_filtered$legendary <- as.factor(df_filtered$legendary)
+```
+
+
+There are 18 classes of primary types of Pokemon.
+The Flying an Fairy classes have the lowest number of Pokemon with 4 and 17, respectively.
+
+
+### Question 3
+
+```{r}
+set.seed(1212)
+df_split <- initial_split(df_filtered, strata = "type_1")
+
+df_train <- training(df_split)
+df_test <- testing(df_split)
+
+df_fold <- vfold_cv(df_train, v = 5, strata = "type_1")
+```
+
+
+Stratified k-fold cross=validation is particularly useful in cases like our where the variable of interest (type_1) is imbalanced, implying that the frequencies of the classes withing that variable are not equally distributed. This type of cross-validation then allows us to ensure that each of the folds have a similar distribution of data withing type_1 as the original dataframe.
