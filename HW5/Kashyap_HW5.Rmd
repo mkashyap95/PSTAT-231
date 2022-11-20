@@ -2,16 +2,23 @@
 title: "Kashyap_HW5"
 author: "Madhuri"
 date: "`r Sys.Date()`"
-output: html_document
+output: 
+html_document:
+  toc: true
+  toc_float: true
+  coad_floating: true
 ---
 
 ## Homework 5
 
-```{r setup, include=FALSE}
+```{r setup, message=FALSE}
 library(janitor)
 library(tidymodels)
 library(tidyverse)
 library(ggplot2)
+library(caret)
+library(broom)
+library(boot)
 
 df <- read.csv("Pokemon.csv")
 ```
@@ -50,6 +57,7 @@ summary(factor(df_filtered$type_1))
 #converting to factors
 df_filtered$type_1 <- as.factor(df_filtered$type_1)
 df_filtered$legendary <- as.factor(df_filtered$legendary)
+df_filtered$generation <- as.factor(df_filtered$generation)
 ```
 
 
@@ -70,4 +78,147 @@ df_fold <- vfold_cv(df_train, v = 5, strata = "type_1")
 ```
 
 
-Stratified k-fold cross=validation is particularly useful in cases like our where the variable of interest (type_1) is imbalanced, implying that the frequencies of the classes withing that variable are not equally distributed. This type of cross-validation then allows us to ensure that each of the folds have a similar distribution of data withing type_1 as the original dataframe.
+Stratified k-fold cross=validation is particularly useful in cases like our where the variable of interest (type_1) is imbalanced, implying that the frequencies of the classes withing that variable are not equally distributed. This type of cross-validation then allows us to ensure that each of the folds have a similar distribution of data withing type_1 as the original data frame.
+
+
+### Question 4
+
+```{r}
+#recipe
+simple_rec1 <- recipe(type_1 ~ legendary + generation + sp_atk + attack + speed + defense +
+                        hp + sp_def, data = df_train) 
+
+pokemon_recipe <- simple_rec1 %>% 
+  step_dummy(legendary) %>% 
+  step_dummy(generation) %>% 
+  step_center(all_numeric_predictors()) %>% 
+  step_scale(all_numeric_predictors())
+pokemon_recipe
+```
+
+
+### Question 5
+
+```{r}
+#model
+reg1 <- multinom_reg(mixture = tune(), penalty = tune()) %>% 
+  set_engine("glmnet")
+
+#workflow
+elastic_workflow <- workflow() %>% 
+  add_recipe(pokemon_recipe) %>% 
+  add_model(reg1)
+
+#tuning penalty
+penalty_grid <- grid_regular(penalty(range = c(-5, 5)), levels = 10)
+penalty_grid
+mixture_grid <- grid_random(mixture(range = c(0,1)), size = 10)
+mixture_grid
+#combining grids to one dataframe
+grid_df <- as.data.frame(c(penalty_grid,mixture_grid))
+```
+
+This model will be run 500 times when used on the folded data (100 for each of the folds).
+
+
+### Question 6
+
+```{r}
+#fitting model
+tuned_mod <- tune_grid(elastic_workflow,
+                       resamples = df_fold,
+                       grid = grid_df)
+tuned_mod
+
+autoplot(tuned_mod)
+
+collect_metrics(tuned_mod)
+```
+
+
+Accuracy and ROC AUC are maximized at smaller penalty values however, mixture has a more variable effect with mostly lower values, but also one higher value allowing for maximization. On average, lower values of both penalty and mixture yield better accuracy and ROC AUC values.
+
+
+### Question 7
+
+```{r}
+#best model
+best_fit <- select_best(tuned_mod, metric = "roc_auc")
+best_fit
+
+#finalizing workflow
+final_mod <- finalize_workflow(elastic_workflow, best_fit)
+
+#applying model to training data
+final_fit <- fit(final_mod, data = df_train)
+
+#applying to testing data
+test_mod <- augment(final_fit, new_data = df_test) 
+  
+
+roc_auc(test_mod,truth = type_1, estimate = .pred_Bug:.pred_Water)
+accuracy(test_mod, truth = type_1, estimate = .pred_class)
+##33% accuracy - not great
+
+conf_mat(test_mod, truth = type_1, estimate = .pred_class)
+#clearly some major issues with specific classes, particularly Fire 
+```
+
+
+Model accuracy for predicting class in testing data is relatively low at 33%. The problem also seems largely concentrated within specific classes, like Fire which the model is not predicting at all
+
+
+### Question 8
+
+```{r}
+#roc curve for training data
+augment(final_fit, new_data = df_train) %>% 
+  roc_auc(type_1, .pred_Bug:.pred_Water)
+
+#roc for testing data
+roc_auc(test_mod, type_1, .pred_Bug:.pred_Water)
+
+#roc curves for each type
+roc_curve(test_mod, type_1, .pred_Bug:.pred_Water) %>% 
+  autoplot()
+
+#heatmap
+test_mod %>% 
+  conf_mat(truth = type_1, estimate = .pred_class) %>%
+  autoplot(type = "heatmap")
+```
+
+
+The model ROC AUC is slightly greater for training data in contrast to testing, but is likely not classifying the types of Pokemon very well in either model since the accuracy is only 30%.
+The confusion matrix highlights this problem. The model is doing a relatively good job at classifying the Normal and Water types, but not as much with the others, with Fire being the worst since the model is not predicting any pokemon to be of the Fire type. It also seems to be having the problem of over-classifying Water types.
+
+### Question 9
+
+```{r}
+x <- c(rep(1, 337), rep(0, 421))
+
+resamples <- lapply(1:1000, function(i) sample(x, replace = T))
+
+boot.mean <- sapply(resamples, mean)
+boot.mean
+
+hist(boot.mean)
+
+abline(v=mean(quantile(boot.mean, probs = 0.005),col="red",lwd=12))
+abline(v=mean(quantile(boot.mean, probs = 0.995),col="red",lwd=12))
+# 99% Confidence Interval:
+c(quantile(boot.mean, probs = 0.005), quantile(boot.mean, probs = 0.995))
+
+
+### Another way to get the 99% confidence interval using boot package ###
+boot_mean_func <- function(orig_vector, resample_vector) {
+  mean(orig_vector[resample_vector])
+}
+
+# R is number of replications
+mean_results <- boot(x, boot_mean_func, R = 1000)
+tidy(mean_results)
+
+boot.ci(mean_results, conf=0.99)
+```
+
