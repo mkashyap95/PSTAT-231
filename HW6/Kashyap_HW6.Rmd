@@ -8,7 +8,135 @@ output: html_document:
   code_float: true
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+
+## Homework 6
+
+```{r setup, message=FALSE}
+library(tidymodels)
+library(tidyverse)
+library(ggplot2)
+library(janitor)
+library(corrplot)
+
+pokemon <- read.csv("Pokemon.csv")
+```
+
+
+### Exercise 1
+
+```{r}
+pokemon_clean <- as_tibble(pokemon) %>% 
+  clean_names()
+
+#visualizing types
+ggplot(pokemon_clean, aes(x = type_1)) +
+  geom_bar(stat = "count", fill = "steelblue") +
+  theme_classic() +
+  coord_flip() +
+  xlab("Primary Type") +
+  ylab("Count") 
+
+#filtering data
+df_filtered <- filter(pokemon_clean, type_1 == "Bug" | type_1 == "Fire" | type_1 == "Grass" 
+                      | type_1 == "Normal" | type_1 == "Water" | type_1 == "Psychic")
+
+#checking new dataframe
+summary(factor(df_filtered$type_1))
+
+#converting to factors
+df_filtered$type_1 <- as.factor(df_filtered$type_1)
+df_filtered$legendary <- as.factor(df_filtered$legendary)
+df_filtered$generation <- as.factor(df_filtered$generation)
+
+#splitting data
+set.seed(1212)
+df_split <- initial_split(df_filtered, strata = "type_1")
+
+df_train <- training(df_split)
+df_test <- testing(df_split)
+
+#v-fold
+df_fold <- vfold_cv(df_train, v = 5, strata = "type_1")
+
+#recipe
+simple_rec1 <- recipe(type_1 ~ legendary + generation + sp_atk + attack + speed + defense +
+                        hp + sp_def, data = df_train) 
+
+pokemon_recipe <- simple_rec1 %>% 
+  step_dummy(legendary) %>% 
+  step_dummy(generation) %>% 
+  step_center(all_numeric_predictors()) %>% 
+  step_scale(all_numeric_predictors())
+pokemon_recipe
+```
+
+
+### Exercise 2
+
+```{r}
+summary(df_train)
+
+mat <- select(df_train,total:speed)
+mat %>% 
+  cor() %>% 
+  corrplot(type = "lower", diag = F, method = 'color')
+```
+
+
+We see that there are no negative correlations which fits with intuition. We also see that the total score is strongly correlated with special attack, and defense, and attack which we would expect as these scores contribute directly to the total score.
+
+
+### Exercise 3
+
+```{r}
+#model
+tree_spec <- decision_tree() %>%
+  set_engine("rpart") %>% 
+  set_mode("classification")
+
+#workflow
+tree_wf <- workflow() %>% 
+  add_model(tree_spec %>% set_args(cost_complexity = tune())) %>% 
+  add_formula(type_1 ~ legendary + generation + sp_atk + attack + speed + 
+                defense + hp + sp_def)
+
+#tuning cost_complexity
+set.seed(1212)
+
+param_grid <- grid_regular(cost_complexity(range = c(-3, -1)), levels = 10)
+
+tune_res <- tune_grid(
+  tree_wf, 
+  resamples = df_fold, 
+  grid = param_grid, 
+  metrics = metric_set(roc_auc)
+)
+tune_res
+
+#visualizing
+autoplot(tune_res)
+```
+
+We see that smaller complexity penalties yield higher model ROC AUC values, and these taper off severely once penalty values are greater than 0.05. Single decision trees therefore perform better with smaller complexity penalty values. 
+
+
+### Exercise 4
+
+```{r}
+tune_res %>% 
+  collect_metrics() %>% 
+  arrange()
+
+best_penalty <- select_best(tune_res, metric = "roc_auc")
+best_penalty
+```
+
+The best-performing model has an ROC AUC value of 0.63.
+
+
+### Exercise 5
+
+```{r}
+
 ```
 
