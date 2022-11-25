@@ -17,6 +17,9 @@ library(tidyverse)
 library(ggplot2)
 library(janitor)
 library(corrplot)
+library(rpart.plot)
+library(randomForest)
+library(vip)
 
 pokemon <- read.csv("Pokemon.csv")
 ```
@@ -131,10 +134,106 @@ best_penalty <- select_best(tune_res, metric = "roc_auc")
 best_penalty
 ```
 
-The best-performing model has an ROC AUC value of 0.63.
+The best-performing model has an ROC AUC value of 0.82.
 
 
 ### Exercise 5
+
+```{r}
+#finalizing workflow and fit
+class_tree_final <- finalize_workflow(tree_wf, best_penalty)
+class_tree_final_fit <- fit(class_tree_final, data = df_train)
+
+augment(class_tree_final_fit, new_data = df_train) %>%
+  roc_auc(truth = type_1, estimate = .pred_Bug:.pred_Water)
+
+#visualizing the tree
+class_tree_final_fit %>%
+  extract_fit_engine() %>%
+  rpart.plot()
+```
+
+
+### Exercise 5
+
+```{r, message=FALSE}
+#model
+rf_spec <- rand_forest(mtry = tune(), trees = tune(), min_n = tune()) %>%
+  set_engine("ranger", importance = "impurity") %>% 
+  set_mode("classification")
+
+p_grid <- grid_regular(mtry(range = c(1,8)),trees(range = c(100,500)), 
+                       min_n(range = c(1,10)), levels = 8)
+
+#workflow
+rf_tree_wf <- workflow() %>% 
+  add_model(rf_spec) %>% 
+  add_formula(type_1 ~ legendary + generation + sp_atk + attack + speed + 
+                defense + hp + sp_def)
+```
+
+
+The mtry parameter allows for a random selection of predictor variables (and is therefore dependent on the number of columns), trees specifies the number of decision trees to be built, and min_m defines the minimum number of data points on node or decision point, that will be required to split the node further. 
+The mtry parameter can't be less than 1 since that's the minimum number of predictors needed for the model to run, and not more than 8 as our recipe defines a maximum of 8 predictor variables. Setting mtry to 8 would test a model similar to the one we've tested above with all of the predictor variables being used in the tree-based model (which may yield redundancies).
+
+
+### Exercise 6
+
+```{r}
+tune_param <- tune_grid(
+  rf_tree_wf, 
+  resamples = df_fold, 
+  grid = p_grid, 
+  metrics = metric_set(roc_auc),
+  control = control_grid(verbose = T)
+)
+
+autoplot(tune_param)
+```
+
+
+the results show that generally, a lower number of predictors yield better performing models. However, the number of trees and node size seem to have rather variable effects, although it does seem that larger node sizes are performing slightly better. It's important to note here that these models don't vary tremendously across each of the parameters based on the ROC AUC values observed (ranges 0.65-0.73).
+
+
+### Exercise 7
+
+```{r}
+tune_param %>% 
+  collect_metrics() %>% 
+  arrange()
+
+best_params <- select_best(tune_param, metric = "roc_auc")
+best_params
+```
+
+
+The ROC AUC of the best model is 0.99.
+
+
+### Exercise 8
+
+```{r}
+#finalizing workflow and fit
+rf_tree_final <- finalize_workflow(rf_tree_wf, best_params)
+rf_tree_final_fit <- fit(rf_tree_final, data = df_train)
+rf_tree_final_fit
+
+augment(rf_tree_final_fit, new_data = df_train) %>%
+  roc_auc(truth = type_1, estimate = .pred_Bug:.pred_Water)
+
+rf_tree_final_fit %>% 
+  extract_fit_parsnip() %>% 
+  vip()
+
+df_train %>% 
+  group_by(type_1) %>% 
+  summarise(mean = mean(sp_atk), n =n())
+```
+
+These results indicate that the special attack value is the most useful while legendary status is the least useful in predicting type of Pokemon. This is not entirely what would be expected since a pokemon's legendary status would significantly help in streamlining the type of pokemon bu only if they are indeed legendary. The importance of the special attack makes intuitive sense since looking at these values by type, there does look to be some significant differences.
+
+
+### Exercise 9
 
 ```{r}
 
