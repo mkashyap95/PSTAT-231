@@ -2,7 +2,8 @@
 title: "Kashyap_HW6"
 author: "Madhuri"
 date: "`r Sys.Date()`"
-output: html_document:
+output: 
+  html_document:
   toc: true
   toc_float: true
   code_float: true
@@ -20,6 +21,9 @@ library(corrplot)
 library(rpart.plot)
 library(randomForest)
 library(vip)
+library(caret)
+library(broom)
+library(boot)
 
 pokemon <- read.csv("Pokemon.csv")
 ```
@@ -91,7 +95,7 @@ We see that there are no negative correlations which fits with intuition. We als
 
 ### Exercise 3
 
-```{r}
+```{r, message=FALSE}
 #model
 tree_spec <- decision_tree() %>%
   set_engine("rpart") %>% 
@@ -128,13 +132,13 @@ We see that smaller complexity penalties yield higher model ROC AUC values, and 
 ```{r}
 tune_res %>% 
   collect_metrics() %>% 
-  arrange()
+  arrange(mean)
 
 best_penalty <- select_best(tune_res, metric = "roc_auc")
 best_penalty
 ```
 
-The best-performing model has an ROC AUC value of 0.82.
+The best-performing model has an ROC AUC value of 0.64.
 
 
 ### Exercise 5
@@ -179,7 +183,7 @@ The mtry parameter can't be less than 1 since that's the minimum number of predi
 
 ### Exercise 6
 
-```{r}
+```{r, message=FALSE}
 tune_param <- tune_grid(
   rf_tree_wf, 
   resamples = df_fold, 
@@ -200,14 +204,14 @@ the results show that generally, a lower number of predictors yield better perfo
 ```{r}
 tune_param %>% 
   collect_metrics() %>% 
-  arrange()
+  arrange(mean)
 
 best_params <- select_best(tune_param, metric = "roc_auc")
 best_params
 ```
 
 
-The ROC AUC of the best model is 0.99.
+The ROC AUC of the best model is 0.73.
 
 
 ### Exercise 8
@@ -235,7 +239,175 @@ These results indicate that the special attack value is the most useful while le
 
 ### Exercise 9
 
-```{r}
+```{r, message=FALSE}
+#model
+boost_spec <- boost_tree(trees = tune()) %>%
+  set_engine("xgboost") %>%
+  set_mode("classification")
 
+#workflow
+boost_wf <- workflow() %>% 
+  add_model(boost_spec) %>% 
+  add_formula(type_1 ~ legendary + generation + sp_atk + attack + speed + 
+                defense + hp + sp_def)
+
+#parameter grid
+set.seed(1212)
+boost_grid <- grid_regular(trees(range = c(10,2000)), levels = 10)
+
+#tuning
+tune_boost <- tune_grid(
+  boost_wf, 
+  resamples = df_fold, 
+  grid = boost_grid, 
+  metrics = metric_set(roc_auc),
+  control = control_grid(verbose = T)
+)
+
+#visual
+autoplot(tune_boost)
+
+#best model
+best_boost <- select_best(tune_boost, metric = "roc_auc")
+best_boost
+
+boost_final <- finalize_workflow(boost_wf, best_boost)
+boost_final_fit <- fit(boost_final, data = df_train)
+boost_final_fit
+
+augment(boost_final_fit, new_data = df_train) %>%
+  roc_auc(truth = type_1, estimate = .pred_Bug:.pred_Water)
+
+collect_metrics(tune_boost) %>% arrange(mean)
 ```
 
+
+We see here that the ROC AUC value increases as the number of trees increases. However, setting trees too high can lead to over fitting issues.
+The ROC AUC value of the best performing model is 0.71.
+
+
+### Exercise 10
+
+```{r}
+model_types = c("pruned tree","random forest","boosted tree")
+tune_results = lst(tune_res, tune_param, tune_boost)
+best_model = lst(best_penalty, best_params, best_boost)
+final_models = lst(class_tree_final_fit, rf_tree_final_fit, boost_final_fit)
+
+rocauc = c()
+
+for (idx in 1:length(tune_results)){
+  performance_tbl <- collect_metrics(tune_results[[idx]]) %>% arrange(mean)
+  best_rocauc <- (filter(performance_tbl, .config == best_model[[idx]]['1', '.config'][[1]]))$mean
+  rocauc <- c(rocauc,best_rocauc)
+}
+
+# put the model types and their ROC AUC's into one table
+combined <- as_tibble(cbind(model_types,rocauc))
+combined
+
+# using the table of rocaucs, find the model type with the best roc auc,
+# and set "best_model" equal to that model's final workflow
+best_model <- final_models[which.max(combined$rocauc)]
+best_model
+
+#re-fit on test data
+test_mod <- augment(best_model[[1]], new_data = df_test)
+test_mod
+  
+#ROC_AUC
+test_mod %>% 
+  roc_auc(truth = type_1, estimate = .pred_Bug:.pred_Water)
+
+#ROC curves
+test_mod %>% 
+  roc_curve(truth = type_1, estimate = .pred_Bug:.pred_Water) %>% 
+  autoplot()
+
+#heatmap
+test_mod %>% 
+  conf_mat(truth = type_1, estimate = .pred_class) %>%
+  autoplot(type = "heatmap")
+```
+
+
+The random forest model performed best on the folds.
+The model looks to be best at predicting the Normal & Psychic types, while performing pretty poorly on classifying most other classes, with the worst one being Water types. This is likely to the disproportionate number of Water type Pokemon present in the data set.
+
+
+### Exercise 11
+
+```{r, message=FALSE}
+#setup
+data_input <- read.csv("abalone.csv")
+data <- as_tibble(data_input) %>%
+  mutate(age = rings+1.5)  %>%
+  mutate(type = factor(type))  %>%
+  select(-rings)
+
+#splitting data
+set.seed(3435)
+data_split <- initial_split(data, strata = "age")
+
+data_train <- training(data_split)
+data_test <- testing(data_split)
+
+#model
+abalone_spec <- rand_forest(mtry = tune(), trees = tune(), min_n = tune()) %>%
+  set_engine("ranger", importance = "impurity") %>% 
+  set_mode("regression")
+
+#tuning grid
+ab_grid <- grid_regular(mtry(range = c(1,8)),trees(range = c(100,500)), 
+                       min_n(range = c(1,10)), levels = 8)
+
+#workflow
+abalone_wf <- workflow() %>% 
+  add_model(abalone_spec) %>% 
+  add_formula(age ~ longest_shell + diameter + height + whole_weight + shucked_weight + 
+                viscera_weight + shell_weight + type)
+
+#v-fold for cross-alidation
+data_fold <- vfold_cv(data_train, v=5, strata = "age")
+
+#tuning
+tune_abalone <- tune_grid(
+  abalone_wf, 
+  resamples = data_fold, 
+  grid = ab_grid, 
+  metrics = metric_set(rsq),
+  control = control_grid(verbose = T)
+)
+
+#visualizing
+autoplot(tune_abalone)
+
+#best model
+ab_best <- select_best(tune_abalone, metric = "rsq")
+
+#finalizing workflow 
+ab_final <- finalize_workflow(abalone_wf, ab_best)
+ab_final_fit <- fit(ab_final, data = data_train)
+ab_final_fit
+
+#rmse for training data
+augment(ab_final_fit, new_data = data_train) %>%  
+  rmse(truth = age, estimate = .pred) 
+#rsq for training
+augment(ab_final_fit, new_data = data_train) %>% 
+  rsq(truth = age, estimate = .pred)
+
+#rmse for testing data
+augment(ab_final_fit, new_data = data_test) %>%
+  rmse(truth = age, estimate = .pred)
+#rsq for testing
+augment(ab_final_fit, new_data = data_test) %>%
+  rsq(truth = age, estimate = .pred)
+
+collect_metrics(tune_abalone) %>% arrange(mean)
+```
+
+
+The best model to maximize RMSE has 2 predictors, 271 tress, and a minimum node size of 10 which yields a mean of RMSE = 0.56
+Fitting this model on the training data, we see the RMSE = 1.25 & R^2 = 0.87
+Refitting this model on testing data, RMSE = 2.21 & R^2 = 0.55 suggesting that we may be encountering some severe overfitting issues.
