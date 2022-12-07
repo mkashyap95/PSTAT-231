@@ -1,0 +1,148 @@
+---
+title: "Kashyap_finalreport"
+author: "Madhuri"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+# Final Project
+#### Madhuri Kashyap
+
+
+## Introduction
+
+
+The aim of this exercise is two-fold: 
+1) To predict what factors contribute most to the ratings of boardgames by users, and
+2) Create a recommendation engine that gamers may use to understand what games they are most likely to enjoy based on a set of games they've played previously.
+
+
+#### Why would these models be useful?
+
+
+In recent years, there has been a resurgence of board games, creating what is known in the community as the "golden era" of games. However, this also implies that there has been a large increase in the kinds of games made (both good and bad) that make it difficult to navigate the market for regular player and proves to be daunting for potential new players. This tool will help all players understand the factors that go into making board games enjoyable and what players can look for in selecting new games while also assisting companies in making decisions on what features are most popular. The recommendation engine serves a similar purpose in understanding the market demands of different users and how game makers may go about streamlining future games in order to cater to those populations.
+
+
+#### Loading Data and Packages
+
+
+```{r setup}
+library(janitor)
+library(tidyverse)
+library(tidyselect)
+
+df <- read.csv("bgg_dataset.csv", sep = ";")
+```
+
+
+
+The data used in this project was collected from the Board Game Geek (BGG) website in February 2021. A full copy of the list of variables is available in the codebook, but here is a quick summary of the variables that will be used in the project:
+
+
+* `name` : Name of the board games
+* `year_published` : The year the game in question was published
+* `min_players` and `max_players` : The minimum and maximum number of players that can accommodated in game play
+* `play_time` : The average time it takes to play the game to fruition
+* `min_age` : The minimum age requirement in order to play the game
+* `users_rated` : The number of users that have rated the board game
+* `rating_average` : The average rating of the board game on a scale of 1-10 (10 being best)
+* `complexity_average` : The average rating of the complexity level of the game on a scale of 1-5 (5 being very complicated)
+* `owned_users` : The number of people who own the game (even if they have not rated the game)
+* `mechanics` : The mechanics involved in game play
+* `domains` : The environment or demographic of play (ex: family, strategy, thematic, etc.)
+
+
+# Data Cleaning
+
+
+```{r}
+#cleaning
+df_clean <- as_tibble(df) %>%
+  clean_names()
+
+#data overview
+summary(df_clean)
+```
+
+
+With our first overview of the data, we notice a few concerns with our data frame:
+
+
+1. The year published is in continuous numeric form and not time form. We will need to convert this to age form using 2022 as a reference. 
+2. The average and complexity ratings are in character/string type. Looking at this further, we see that this issue is likely due to the usage of commas instead of periods to signify decimal points. We will need convert this to numeric form to make the ratings usable.
+3. There are a few missing values, particularly in the owned users column. There don't seem to be a significant number of these and since this may also potentially skew the ratings, we will remove those rows from the data set.
+4. The mechanics and domain columns are in string/character form, and will need to be explored more manually.
+
+
+#### Converting Year Published to Age of Game
+
+
+```{r}
+convert_year <- function(x){
+  2022 - x
+}
+df_clean$game_age <- sapply(df_clean$year_published, convert_year)
+summary(df_clean)
+```
+
+
+Now that the year published is in age form, we see that the youngest game was published this year (2022), while the oldest game is over 5500 years old!
+
+
+#### Converting ratings to numeric form
+
+```{r}
+convert_string <- function(y){
+  as.numeric(str_replace_all(y,",","."))
+}
+df_clean[c("rating_average","complexity_average")] <- lapply(df_clean[c("rating_average","complexity_average")], convert_string)
+
+head(df_clean)
+summary(df_clean)
+```
+
+
+We can now use our ratings as they are in numeric form and see that there is a wide variety of games within the data set.
+
+
+#### Excluding missing values
+
+
+```{r}
+df_comp <- na.omit(df_clean)
+summary(df_comp)
+```
+
+
+The data set is now void of missing values which removed a total of 23 observations.
+
+
+#### Exploring the mechanics and domain columns
+
+
+```{r}
+df_comp[19000,"domains"]
+```
+
+
+Exploring the mechanics and domains columns further, we see that although there aren't any NA values, there are a fair number or empty observations, likely not detected as NAs due to spaces in the observations.
+We first replace the spaces with NAs to assess how many missing values we're dealing with.
+
+
+```{r}
+df_comp[df_comp == ""] <- NA
+
+#counting NAs
+dim(df_comp[is.na(df_comp$domains),])
+dim(df_comp[!is.na(df_comp$domains),])
+
+dim(df_comp[is.na(df_comp$mechanics),])
+dim(df_comp[!is.na(df_comp$mechanics),])
+```
+
+
+We see that there are a significant number of missing values, particularly in domains. Due to the number of missing values, simply excluding them from analysis is not an option, so I've decided to substitute the missing values with filler values. I will be replacing the missing domain values with "Basic" and the missing mechanics values with "Not mentioned".
