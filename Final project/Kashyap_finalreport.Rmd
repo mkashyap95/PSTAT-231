@@ -6,7 +6,7 @@ output:
   html_document:
     toc: true
     toc_float: true
-    code_folding: hide
+    code_folding: show
 ---
 
 # Final Project
@@ -21,20 +21,27 @@ The aim of this exercise is two-fold:
 2) Create a recommendation engine that gamers may use to understand what games they are most likely to enjoy based on a set of games they've played previously.
 
 
-#### Why would these models be useful?
+### Why would these models be useful?
 
 
 In recent years, there has been a resurgence of board games, creating what is known in the community as the "golden era" of games. However, this also implies that there has been a large increase in the kinds of games made (both good and bad) that make it difficult to navigate the market for regular player and proves to be daunting for potential new players. This tool will help all players understand the factors that go into making board games enjoyable and what players can look for in selecting new games while also assisting companies in making decisions on what features are most popular. The recommendation engine serves a similar purpose in understanding the market demands of different users and how game makers may go about streamlining future games in order to cater to those populations.
 
 
-#### Loading Data and Packages
+### Loading Data and Packages
 
 
-```{r setup}
+```{r setup, message=FALSE, warning=FALSE}
 library(janitor)
 library(tidyverse)
 library(tidyselect)
+library(dplyr)
+library(corrplot)
+library(ggplot2)
+library(GGally)
+library(reticulate)
 
+
+setwd("C:\\Users\\kashyap\\Desktop\\PSTAT-231\\Final project\\data\\unprocessed")
 df <- read.csv("bgg_dataset.csv", sep = ";")
 ```
 
@@ -46,7 +53,7 @@ The data used in this project was collected from the Board Game Geek (BGG) websi
 * `name` : Name of the board games
 * `year_published` : The year the game in question was published
 * `min_players` and `max_players` : The minimum and maximum number of players that can accommodated in game play
-* `play_time` : The average time it takes to play the game to fruition
+* `play_time` : The total amount of time spent playing the game to fruition
 * `min_age` : The minimum age requirement in order to play the game
 * `users_rated` : The number of users that have rated the board game
 * `rating_average` : The average rating of the board game on a scale of 1-10 (10 being best)
@@ -63,9 +70,6 @@ The data used in this project was collected from the Board Game Geek (BGG) websi
 #cleaning
 df_clean <- as_tibble(df) %>%
   clean_names()
-
-#data overview
-summary(df_clean)
 ```
 
 
@@ -78,7 +82,8 @@ With our first overview of the data, we notice a few concerns with our data fram
 4. The mechanics and domain columns are in string/character form, and will need to be explored more manually.
 
 
-#### Converting Year Published to Age of Game
+
+### Converting Year Published to Age of Game
 
 
 ```{r}
@@ -86,47 +91,37 @@ convert_year <- function(x){
   2022 - x
 }
 df_clean$game_age <- sapply(df_clean$year_published, convert_year)
-summary(df_clean)
 ```
 
 
 Now that the year published is in age form, we see that the youngest game was published this year (2022), while the oldest game is over 5500 years old!
 
 
-#### Converting ratings to numeric form
+### Converting ratings to numeric form
 
 ```{r}
 convert_string <- function(y){
   as.numeric(str_replace_all(y,",","."))
 }
 df_clean[c("rating_average","complexity_average")] <- lapply(df_clean[c("rating_average","complexity_average")], convert_string)
-
-head(df_clean)
-summary(df_clean)
 ```
 
 
 We can now use our ratings as they are in numeric form and see that there is a wide variety of games within the data set.
 
 
-#### Excluding missing values
+### Excluding missing values
 
 
 ```{r}
-df_comp <- na.omit(df_clean)
-summary(df_comp)
+df_comp <- drop_na(df_clean)
 ```
 
 
 The data set is now void of missing values which removed a total of 23 observations.
 
 
-#### Cleaning the mechanics and domain columns
-
-
-```{r}
-df_comp[19000,"domains"]
-```
+### Cleaning the mechanics and domain columns
 
 
 Exploring the mechanics and domains columns further, we see that although there aren't any NA values, there are a fair number or empty observations, likely not detected as NAs due to spaces in the observations.
@@ -135,13 +130,6 @@ We first replace the spaces with NAs to assess how many missing values we're dea
 
 ```{r}
 df_comp[df_comp == ""] <- NA
-
-#counting NAs
-dim(df_comp[is.na(df_comp$domains),])
-dim(df_comp[!is.na(df_comp$domains),])
-
-dim(df_comp[is.na(df_comp$mechanics),])
-dim(df_comp[!is.na(df_comp$mechanics),])
 ```
 
 
@@ -163,10 +151,90 @@ clean_string <- function(z){
 }
 df_comp$mechanics <- lapply(df_comp$mechanics, clean_string)
 
-df_comp$mechanics
 #converting to string
 df_comp$mechanics <- as.character(df_comp$mechanics)
 ```
 
 
+### Dropping unused columns
+
+
+```{r}
+df_comp <- subset(df_comp, select=-c(id,year_published))
+```
+
+
+As a final step to make the data cleaner, I will drop the unused variables of game ID and year published. Game ID is BGG's method of identification and is irrelevant for the current project and we already created a more readable version of year published making that that column redundant. We will retain name of games as a unique identifier.
+
+
+Another variable that was considered worth dropping was BGG rank. The ranks of games are compiled using a combination of the average rating, average complexity, and number of users. This makes the rank variable somewhat problematic in any models that aim to predict rating average due to high correlations between rank and rating. Therefore, rank will not be used for the purpose of understanding factors predicting rank, but will be used in the second portion of the project (the recommendation engine).
+
 # Data Exploration
+
+
+### Pair Plot
+
+
+Note: The following section was done using the reticulate package that helps with using python code within R terminals. Seaborn has some really useful methods of visualization that can be used to understand the data better. However, this does not work outside of Markdowns and has not been included in my script files as a consequence.
+
+
+```{r}
+reticulate::repl_python()
+```
+
+
+```{python}
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+data = pd.read_csv("C:\\Users\\kashyap\\Desktop\\PSTAT-231\\Final project\\data\\processed\\cleaned.csv")
+
+sns.set(rc={"axes.facecolor":"#FCE4DE","figure.facecolor":"#CABFC1"})
+hue_C = ["#615154", "#F7B4A7", "#94DDDE", "#F0ABC1", "#B46B82"]
+sns.pairplot(data,hue= "Stars", palette= hue_C)
+```
+
+
+We see that there may be a few outliers, and can take a close look at the plots to discern this better.
+
+
+```{python, warning=FALSE}
+To_plot = ["min_players","play_time", "users_rated","bgg_rank", "game_age"]
+for i in To_plot:
+    sns.jointplot(x=data["rating_average"], y=data[i], hue=data["Stars"], palette= hue_C)
+    plt.show()
+```
+
+
+We see now that there a few key outliers that are worth removing in order to not skew the results of our models.
+
+
+```{r}
+#Dropping the outliers. 
+df_comp <- subset(df_comp, max_players<300, play_time<30000)
+df_comp <- subset(df_comp, min_age<22, users_rated<100000)
+```
+
+
+### Heatmap
+
+
+```{r}
+select_if(df_comp, is.numeric) %>% 
+  cor() %>%
+  corrplot(type = "lower", diag = F, method = "color")
+```
+
+
+Looking at the correlations between our numeric variables, we see a few relationships standout:
+
+
+* For the reasons mentioned earlier, we see that BGG rank and average rating are highly negatively correlated
+* We also see an expected strong positive correlation between users_rated and owned_users, implying that most players who own a game have likely also rated the game on BGG. We will go ahead and drop the owned_users variable for the analysis in order to not double-count this metric.
+
+
+```{r}
+
+```
+
