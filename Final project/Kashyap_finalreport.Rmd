@@ -121,7 +121,7 @@ summary(df_comp)
 The data set is now void of missing values which removed a total of 23 observations.
 
 
-#### Exploring the mechanics and domain columns
+#### Cleaning the mechanics and domain columns
 
 
 ```{r}
@@ -146,3 +146,27 @@ dim(df_comp[!is.na(df_comp$mechanics),])
 
 
 We see that there are a significant number of missing values, particularly in domains. Due to the number of missing values, simply excluding them from analysis is not an option, so I've decided to substitute the missing values with filler values. I will be replacing the missing domain values with "Basic" and the missing mechanics values with "Not mentioned".
+
+
+```{r}
+df_comp$domains <- replace(df_comp$domains, is.na(df_comp$domains), "Basic")
+df_comp$mechanics <- replace(df_comp$mechanics, is.na(df_comp$mechanics), "Not mentioned")
+```
+
+
+In the process of cleaning, I also noticed that the specific mechanics listed for each game are separated by either commas or backslashes. In order to make this more consistent, I will replace the backslashes with commas.
+
+
+```{r}
+clean_string <- function(z){
+  str_replace_all(z, "/",",")
+}
+df_comp$mechanics <- lapply(df_comp$mechanics, clean_string)
+
+df_comp$mechanics
+#converting to string
+df_comp$mechanics <- as.character(df_comp$mechanics)
+```
+
+
+# Data Exploration
