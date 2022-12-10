@@ -39,6 +39,18 @@ library(corrplot)
 library(ggplot2)
 library(GGally)
 library(reticulate)
+library(tidymodels)
+library(rpart.plot)
+library(randomForest)
+library(vip)
+library(caret)
+library(broom)
+library(boot)
+library(data.table)
+library(mlr)
+library(ClusterR)
+library(cluster)
+library(factoextra)
 
 
 setwd("C:\\Users\\kashyap\\Desktop\\PSTAT-231\\Final project\\data\\unprocessed")
@@ -160,7 +172,7 @@ df_comp$mechanics <- as.character(df_comp$mechanics)
 
 
 ```{r}
-df_comp <- subset(df_comp, select=-c(id,year_published))
+df_comp <- subset(df_comp, select=-c(id,year_published,name))
 ```
 
 
@@ -168,6 +180,7 @@ As a final step to make the data cleaner, I will drop the unused variables of ga
 
 
 Another variable that was considered worth dropping was BGG rank. The ranks of games are compiled using a combination of the average rating, average complexity, and number of users. This makes the rank variable somewhat problematic in any models that aim to predict rating average due to high correlations between rank and rating. Therefore, rank will not be used for the purpose of understanding factors predicting rank, but will be used in the second portion of the project (the recommendation engine).
+
 
 # Data Exploration
 
@@ -188,7 +201,9 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-data = pd.read_csv("C:\\Users\\kashyap\\Desktop\\PSTAT-231\\Final project\\data\\processed\\cleaned.csv")
+#this csv is df_comp from above that needed to be read in a second time since R and
+#Python's environments don't interact
+data = pd.read_csv("C:\\Users\\kashyap\\Desktop\\PSTAT-231\\Final project\\data\\processed\\cleaned.csv") 
 
 sns.set(rc={"axes.facecolor":"#FCE4DE","figure.facecolor":"#CABFC1"})
 hue_C = ["#615154", "#F7B4A7", "#94DDDE", "#F0ABC1", "#B46B82"]
@@ -207,7 +222,12 @@ for i in To_plot:
 ```
 
 
-We see now that there a few key outliers that are worth removing in order to not skew the results of our models.
+We see now that there a few key outliers that are worth removing in order to not skew the results of our models. A few other key points to note from a preliminary look at the data are:
+
+
+1. The games with the best ratings generally accommodate 5 or fewer players.
+2. Expectedly, we see that total play time is greater when the average rating is high.
+3. There's a positive relationship between users rated and average rating which can also be expected - people generally rate games that they like than the ones that they don't.
 
 
 ```{r}
@@ -234,7 +254,520 @@ Looking at the correlations between our numeric variables, we see a few relation
 * We also see an expected strong positive correlation between users_rated and owned_users, implying that most players who own a game have likely also rated the game on BGG. We will go ahead and drop the owned_users variable for the analysis in order to not double-count this metric.
 
 
+### One Hot Encoding
+
+
+```{r step1}
+convert_str_to_list <- function(x){
+  c(strsplit(x, ", "))
+}
+df_comp$mechanics <- lapply(df_comp$mechanics, convert_str_to_list)
+df_comp$domains <- lapply(df_comp$domains, convert_str_to_list)
+```
+
+
+Upon taking a closer look at the mechanics and domains variables, I deemed that One Hot Encoding (OHE) is the best way to address them. OHE allows for the conversion of categorical variables to a more quantified format. This method has been observed to generally improve the accuracy of classification models. I will dot this using a 5 step process with the first being the conversion of strings to lists in order to make the variables easier to deal with.
+
+
+```{r step2}
+unique_mechanics = c()
+for (row in 1:nrow(df_comp)) {
+  unique_mechanics = union(unique_mechanics,unlist(df_comp[row, "mechanics"]))
+}
+
+unique_domains = c()
+for (row in 1:nrow(df_comp)) {
+  unique_domains = union(unique_domains,unlist(df_comp[row, "domains"]))
+}
+```
+
+
+Next, all the unique values from the lists will be extracted in order to help us understand how many dummy variables to create, which is our next step.
+
+
+```{r step3}
+prep_column_name <- function(x){
+  paste0("Domain ", x)
+}
+unique_domain_cols <- lapply(unique_domains, prep_column_name)
+prep_column_name <- function(x){
+  paste0("Mechanic ", x)
+}
+unique_mechanic_cols <- lapply(unique_mechanics, prep_column_name)
+
+df_comp[unlist(unique_domain_cols)] <- 0
+df_comp[unlist(unique_mechanic_cols)] <- 0
+```
+
+
+
+```{r step4}
+for (row in 1:nrow(df_comp)) {
+  dom_vec = unlist(df_comp[row, "domains"])
+  for (dom_idx in 1:length(dom_vec)){
+    dom_col = paste0("Domain ", dom_vec[dom_idx])
+    df_comp[row, dom_col] = 1
+  }
+
+  mech_vec = unlist(df_comp[row, "mechanics"])
+  for (mech_idx in 1:length(mech_vec)){
+    mech_col = paste0("Mechanic ", mech_vec[mech_idx])
+    df_comp[row, mech_col] = 1
+  }
+}
+```
+
+
+Lastly, we go about populating these dummy variables. Any domain or mechanic that he game falls into, gets marked with 1 and all the others are marked with a 0. This is then repeated for each game/row. We then dropped one of the dummy coded columns from the domains and mechanics in order to avoid the dummy variable trap.
+
+
+```{r step5}
+min_sum_mech = nrow(df_comp)
+min_idx_mech = 0
+for (col_idx in 1:length(unique_mechanic_cols)){
+  sum_ = sum(df_comp[, unique_mechanic_cols[col_idx][[1]]])
+  if (sum_<min_sum_mech){
+    min_idx_mech = col_idx
+    min_sum_mech = sum_
+  }
+}
+
+min_sum_dom = nrow(df_comp)
+min_idx_dom = 0
+for (col_idx in 1:length(unique_domain_cols)){
+  sum_ = sum(df_comp[, unique_domain_cols[col_idx][[1]]])
+  if (sum_<min_sum_dom){
+    min_idx_dom = col_idx
+    min_sum_dom = sum_
+  }
+}
+
+# drop columns to avoid dummy variable trap
+drop <- c(unique_domain_cols[min_idx_dom][[1]],unique_mechanic_cols[min_idx_mech][[1]])
+df_final = df_comp[,!(names(df_comp) %in% drop)]
+
+#save this file
+#write.csv(df_final, "C:\\Users\\kashyap\\Desktop\\PSTAT-231\\Final project\\data\\processed\\cleaned_final.csv", row.names = FALSE)
+```
+
+
+## Data Split
+
+We drop BGG rank since it's dependent on our outcome variable.
+With our data, now fully cleaned and preprocessed, we turn to splitting our data set into training and testing sets before model selection.
+
+
 ```{r}
+#reading in final data
+df_final <- read.csv("C:\\Users\\kashyap\\Desktop\\PSTAT-231\\Final project\\data\\processed\\cleaned_final.csv") 
+
+drop <- c("year_published", "id", "name", "Stars", "owned_users", "mechanics", "domains","bgg_rank")
+df_final = df_final[,!(names(df_final) %in% drop)]
+
+
+#splitting data
+set.seed(1212)
+df_split <- initial_split(df_final, strata = "rating_average")
+
+df_train <- training(df_split)
+df_test <- testing(df_split)
+
+#parameter grid
+form = as.formula(paste("rating_average", "~", paste(colnames(df_final), collapse='+')))
+
+df_fold <- vfold_cv(df_train, v=5, strata = "rating_average")
+```
+
+
+# Predicting Average Ratings
+
+
+## Model Selection
+
+
+In this section, I will test 6 classes of models, 4 to predict average ratings and 2 to (attempt to) act as a recommendation engine.
+In order to predict average ratings, I will be running a linear regression, a decision tree, a random forest model, and an xgboost model. For the recommendation engine, I will be applying Principal Component Analysis (PCA) and then fitting a K-means clustering algorithm and a hierchial clustering algorithm.
+
+
+### Linear Regression
+
+
+```{r}
+simple_recipe <- recipe(form, data = df_train)
+
+#dummy coding categorical predictors
+final_recipe <- simple_recipe %>% 
+  step_dummy(all_nominal_predictors()) %>% 
+  step_center(all_numeric_predictors()) %>% 
+  step_scale(all_numeric_predictors())
+
+lm_model <- linear_reg() %>% 
+  set_engine("lm")
+
+lm_wflow <- workflow() %>% 
+  add_model(lm_model) %>% 
+  add_recipe(final_recipe)
+
+summary(lm_wflow)
+
+#fitting to model and recipe
+lm_fit <- fit(lm_wflow, df_train)
+lm_fit %>% 
+  extract_fit_parsnip() %>% 
+  tidy()
+
+#training RMSE
+lm_train_res <- predict(lm_fit, new_data = df_train %>% select(-rating_average))
+lm_train_res %>% 
+  head()
+
+#reattaching column of actual observed age
+lm_train_res <- bind_cols(lm_train_res, df_train %>% select(rating_average))
+lm_train_res %>% 
+  head()
+
+#metrics
+lm_metrics <- metric_set(yardstick::rmse, yardstick::rsq, yardstick::mae)
+lm_metrics(lm_train_res, truth = rating_average, estimate = .pred)
+
+#plotting predicted vs. observed
+lm_train_res %>% 
+  ggplot(aes(x=.pred, y=jitter(rating_average))) +
+  geom_point(alpha = 0.2) +
+  geom_abline(lty=2) +
+  theme_classic() +
+  coord_obs_pred()
+```
+
+
+
+We see that the variance explained, or R^2^, is ~38%, while RMSE (~73%) and MAE (~55%) are relatively high suggesting that a simple regression is ulikely to be the best fit for this data set.
+
+
+### Decision Tree
+
+
+```{r}
+#model
+tree_spec <- decision_tree() %>%
+  set_engine("rpart") %>% 
+  set_mode("regression")
+
+#workflow
+tree_wf <- workflow() %>% 
+  add_model(tree_spec %>% set_args(cost_complexity = tune())) %>% 
+  add_formula(form)
+
+#tuning cost_complexity
+param_grid <- grid_regular(cost_complexity(range = c(-3, -1)), levels = 10)
+
+tune_res <- tune_grid(
+  tree_wf, 
+  resamples = df_fold, 
+  grid = param_grid,
+  metrics = metric_set(yardstick::rmse),
+  control = control_grid(verbose = T)
+)
+
+autoplot(tune_res)
+```
+
+
+We tuned the complexity cost parameter in order to find the best decision tree, and notice that the decision tree performs better at lower complexity penalties than at higher values. 
+
+```{r}
+tune_res %>% 
+  collect_metrics() %>% 
+  arrange(mean)
+
+best_penalty <- select_best(tune_res, metric = "rmse")
+best_penalty
+
+tree_final <- finalize_workflow(tree_wf, best_penalty)
+tree_final_fit <- fit(tree_final, data = df_train)
+tree_final_fit
+
+augment(tree_final_fit, new_data = df_train) %>%
+  rmse(truth = rating_average, estimate=.pred)
+
+collect_metrics(tune_res) %>% arrange(mean)
+```
+
+
+The best performing tree model has an RMSE value of 0.09 with a cost complexity penalty of 0.001. This RMSE value is unusually low, which may overshadow some overfitting problems later on.
+
+
+### XGBoosted Tree
+
+
+```{r}
+# training XGB boost for regression
+#model
+xgb_spec <- boost_tree(
+  trees = tune(), 
+  tree_depth = tune(), 
+  min_n = tune(), 
+  loss_reduction = tune(),                     ## first three: model complexity
+  sample_size = tune(), 
+  mtry = tune(),         ## randomness
+  learn_rate = tune(),                         ## step size
+) %>% 
+  set_engine("xgboost") %>% 
+  set_mode("regression")
+
+xgb_grid <- grid_latin_hypercube(
+  tree_depth(),
+  min_n(),
+  trees(),
+  loss_reduction(),
+  sample_size = sample_prop(),
+  finalize(mtry(), df_train),
+  learn_rate(),
+  size = 25
+)
+
+
+#workflow
+boost_wf <- workflow() %>%
+  add_formula(form) %>%
+  add_model(xgb_spec)
+
+
+xgb_res <- tune_grid(
+  boost_wf,
+  resamples = df_fold,
+  grid = xgb_grid,
+  metrics = metric_set(yardstick::rmse),
+  control = control_grid(verbose=T)
+)
+```
+
+
+```{r}
+xgb_res
+autoplot(xgb_res)
+
+xgb_res %>%
+  collect_metrics() %>%
+  arrange(mean)
+
+best_boost <- select_best(xgb_res, metric = "rmse")
+best_boost
+
+boost_final <- finalize_workflow(boost_wf, best_boost)
+boost_final_fit <- fit(boost_final, data = df_train)
+boost_final_fit
+
+augment(boost_final_fit, new_data = df_train) %>%
+  rmse(truth = rating_average, estimate=.pred)
+
+collect_metrics(xgb_res) %>% arrange(mean)
+```
+
+We tuned the number of predictors (mtry), the number of trees, the minimal node size, the depth of the tree (maximum number of splits), the learning rate (the rate at which the boosting algorithm adapts), the loss reduction (the reduction in the loss function required to split the tree further), and the sample 
+The model suggests that higher learning rates tend to lead to lower RMSEs (and is also at risk of overfitting). There is also a similar relationship between sample size and RMSE, however the other variables are a bit more variable in their effects on RMSE.
+The best performing XG Boost model contains 127 predictors, 683 trees, a minimal node size of 7, a tree depth of 9, a learning rate of 0.07, a marginal loss reduction, and a sample size of 0.75. This model yields an RMSE of 0.023.
+
+
+### Random Forest
+
+
+```{r}
+# training Random forest for predicting rating_average
+#model
+rf_spec <- rand_forest(mtry = tune(), trees = tune(), min_n = tune()) %>%
+  set_engine("ranger", importance = "impurity") %>% 
+  set_mode("regression")
+
+p_grid <- grid_regular(mtry(range = c(1,8)),trees(range = c(100,500)), 
+                       min_n(range = c(1,10)), levels = 8)
+
+#workflow
+rf_tree_wf <- workflow() %>% 
+  add_model(rf_spec) %>% 
+  add_formula(form)
+
+tune_param <- tune_grid(
+  rf_tree_wf, 
+  resamples = df_fold, 
+  grid = p_grid,
+  metrics = metric_set(yardstick::rmse),
+  control = control_grid(verbose = T)
+)
+
+autoplot(tune_param)
+```
+
+
+It looks like neither number of trees nor the minimal node size have a significant impact on the model results. The largest difference seems to come from the number of predictors. We will next go about selecting the best model from the tuned models.
+
+
+```{r}
+tune_param
+autoplot(tune_param)
+
+tune_param %>% 
+  collect_metrics() %>% 
+  arrange(mean)
+
+best_rf <- select_best(tune_param, metric = "rmse")
+best_rf
+
+rf_final <- finalize_workflow(rf_tree_wf, best_rf)
+rf_final_fit <- fit(rf_final, data = df_train)
+rf_final_fit
+
+augment(rf_final_fit, new_data = df_train) %>%
+  rmse(truth = rating_average, estimate=.pred)
+
+collect_metrics(tune_param) %>% arrange(mean)
+```
+
+
+The best model here is one that has 8 predictors, 500 trees, and a minimum node size of 2. We will compare this to the best models from the other classes in order to arrive at which class of models is the best fit for the data set.
+
+
+## Model Evaluation
+
+
+```{r}
+model_types = c("pruned tree","random forest","xgboost","linear regression")
+final_models = lst(tree_final_fit, rf_final_fit, boost_final_fit, lm_fit)
+rmses = c(0.09, 0.36, 0.02, 0.56)
+
+
+# put the model types and their ROC AUC's into one table
+combined <- as_tibble(cbind(model_types,rmses))
+combined
+
+# using the table of rocaucs, find the model type with the best roc auc,
+# and set "best_model" equal to that model's final workflow
+best_model <- final_models[which.min(combined$rmses)]
+best_model
+
+#re-fit on test data
+test_mod <- augment(best_model[[1]], new_data = df_test)
+test_mod
+  
+#RMSE
+test_mod %>% 
+  rmse(truth = rating_average, estimate=.pred)
+
+#scatterplot
+augment(best_model[[1]], new_data = df_test) %>%
+  ggplot(aes(rating_average, .pred)) +
+  geom_abline() +
+  geom_point(alpha = 0.5)
+```
+
+
+```{r, message=FALSE}
+# Fitting the random forest model to the testing data since that performed best in-sample
+
+#finalizing workflow 
+model_final <- finalize_workflow(boost_wf, best_boost)
+model_final_fit <- fit(model_final, data = df_train)
+model_final_fit
+
+#rmse for training data
+augment(model_final_fit, new_data = df_train) %>%  
+  rmse(truth = rating_average, estimate = .pred) 
+
+#rmse for testing data
+augment(model_final_fit, new_data = df_test) %>%
+  rmse(truth = rating_average, estimate = .pred)
 
 ```
+
+
+The model with the best (lowest) RMSE on the folds is our XGBoost model. When applying this model to test data, we see that there our predicted ratings are very similar to the actual ratings and yields a testing RMSE on 0.016 which is theoretically worse than our training RMSE but is still performing excellently.
+
+
+# Recommendation Engine
+
+
+Here we attempt to build a model that can recommend other games based on a player's current preferences. To do so, we will build an unsupervised learning model that will cluster games based on relevant characteristics. Then, if a player likes a game in one cluster, we can recommend to them other games in the same cluster.
+
+We will try both k-means cluserting & hiearchial clustering.
+
+
+### Clustering Models
+
+
+```{r}
+# training k-means clustering for recommendation engine (unsupervised learning)
+# first, we are going to apply PCA
+
+df <- read.csv("C:\\Users\\kashyap\\Desktop\\PSTAT-231\\Final project\\data\\processed\\cleaned_final.csv")
+
+df <- df[,c("year_published", "min_players", "max_players", "play_time", "min_age", "users_rated", "rating_average", "bgg_rank", "complexity_average", "game_age")]
+
+# First, perform PCA to reduce dimensionality and expedite k-means clustering & plotting
+res.pca <- prcomp(df, scale = TRUE)
+# plot the pca results
+fviz_eig(res.pca)
+
+df_transform = as.data.frame(-res.pca$x[,1:2])
+
+fviz_nbclust(df_transform, kmeans, method = "silhouette")
+
+# set k based on the above determination of optimal clusters
+k = 2
+kmeans_post_pca = kmeans(df_transform, centers = 2, nstart = 50)
+# it appears there are two relatively distinct clusters
+fviz_cluster(kmeans_post_pca, data = df_transform)
+
+
+# Calculate a distance matrix to be used to hierachial clustering
+distance_mat <- dist(df, method = 'euclidean')
+
+# try hierchial clustering for comparison
+Hierar_cl <- hclust(distance_mat, method = "average")
+plot(Hierar_cl)
+
+abline(h = 110, col = "green")
+ 
+# Cutting tree by no. of clusters
+fit <- cutree(Hierar_cl, k = 3 )
+
+table(fit)
+rect.hclust(Hierar_cl, k = 3, border = "green")
+# it appears that the hierachial clustering is not a good fit for our dataset
+```
+
+
+PCA followed by k-means clustering revealed two relatively distinct clusters in our dataset that could be a good starting point for recommendations. However, given that they are only two clusters, it will not allow for particularly specific recommendations.
+
+Meanwhile, hierachial clustering appears to not be a good fit for our dataset, especially given that we already had to remove two crucial categorical variables (domains & mechanics). The agglomerative clustering algorithm could have been hindered by the high number & dimensionality of our dataset.
+
+
+```{r}
+# alternative hierchial clustering
+# Calculate a distance matrix to be used to hierachial clustering
+distance_mat <- dist(df_transform, method = 'euclidean')
+
+# try hierchial clustering for comparison
+Hierar_cl <- hclust(distance_mat, method = "average")
+plot(Hierar_cl)
+
+abline(h = 110, col = "green")
+ 
+# Cutting tree by no. of clusters
+fit <- cutree(Hierar_cl, k = 3 )
+
+table(fit)
+rect.hclust(Hierar_cl, k = 3, border = "green")
+# it appears that the hierachial clustering is not a good fit for our dataset
+
+```
+
+
+This hiearchial clustering chart is almost comically bad, and reinforces our belief that k-means clustering is the better fit for this dataset.
+
+
+# Conclusion
+
+
+To summarize, our XGBoost model performed best in predicting the average ratings of board games. However, our recommendation engine models leave a lot to be desired and imply that this data set is not amenable to unsupervised learning.
+
 
