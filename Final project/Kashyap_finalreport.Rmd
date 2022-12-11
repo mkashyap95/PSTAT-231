@@ -353,6 +353,7 @@ df_final = df_comp[,!(names(df_comp) %in% drop)]
 
 ## Data Split
 
+
 We drop BGG rank since it's dependent on our outcome variable.
 With our data, now fully cleaned and preprocessed, we turn to splitting our data set into training and testing sets before model selection.
 
@@ -500,7 +501,7 @@ The best performing tree model has an RMSE value of 0.09 with a cost complexity 
 ### XGBoosted Tree
 
 
-```{r}
+```{r, message=FALSE}
 # training XGB boost for regression
 #model
 xgb_spec <- boost_tree(
@@ -572,7 +573,7 @@ The best performing XG Boost model contains 127 predictors, 683 trees, a minimal
 ### Random Forest
 
 
-```{r}
+```{r, message=FALSE}
 # training Random forest for predicting rating_average
 #model
 rf_spec <- rand_forest(mtry = tune(), trees = tune(), min_n = tune()) %>%
