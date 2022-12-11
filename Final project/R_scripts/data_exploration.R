@@ -96,3 +96,27 @@ drop <- c(unique_domain_cols[min_idx_dom][[1]],unique_mechanic_cols[min_idx_mech
 df_final = df_comp[,!(names(df_comp) %in% drop)]
 #dummy variables
 
+#save this file
+#write.csv(df_final, "C:\\Users\\kashyap\\Desktop\\PSTAT-231\\Final project\\data\\processed\\cleaned_final.csv", row.names = FALSE)
+
+
+
+#data split
+#reading in final data
+df_final <- read.csv("C:\\Users\\kashyap\\Desktop\\PSTAT-231\\Final project\\data\\processed\\cleaned_final.csv")
+
+drop <- c("year_published", "id", "name", "Stars", "owned_users", "mechanics", "domains","bgg_rank")
+df_final = df_final[,!(names(df_final) %in% drop)]
+
+
+#splitting data
+set.seed(1212)
+df_split <- initial_split(df_final, strata = "rating_average")
+
+df_train <- training(df_split)
+df_test <- testing(df_split)
+
+#parameter grid
+form = as.formula(paste("rating_average", "~", paste(colnames(df_final), collapse='+')))
+
+df_fold <- vfold_cv(df_train, v=5, strata = "rating_average")
