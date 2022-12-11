@@ -1,0 +1,11 @@
+name : Name of the board games
+year_published : The year the game in question was published
+min_players and max_players : The minimum and maximum number of players that can accommodated in game play
+play_time : The total amount of time spent playing the game to fruition
+min_age : The minimum age requirement in order to play the game
+users_rated : The number of users that have rated the board game
+rating_average : The average rating of the board game on a scale of 1-10 (10 being best)
+complexity_average : The average rating of the complexity level of the game on a scale of 1-5 (5 being very complicated)
+owned_users : The number of people who own the game (even if they have not rated the game)
+mechanics : The mechanics involved in game play
+domains : The environment or demographic of play (ex: family, strategy, thematic, etc.)
